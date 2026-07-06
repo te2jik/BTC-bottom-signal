@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BTC Bottom Monitor — Cycle 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#101418;
+    --panel:#171d24;
+    --panel-2:#1d242d;
+    --line:#242d38;
+    --amber:#ffb454;
+    --amber-dim:#8a6430;
+    --green:#3fb68b;
+    --red:#e5534b;
+    --text:#e8e4da;
+    --muted:#6b7684;
+    --mono:'JetBrains Mono',monospace;
+    --sans:'IBM Plex Sans JP',sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--sans);
+    font-size:14px;
+    line-height:1.6;
+    padding:16px;
+    max-width:920px;
+    margin:0 auto;
+  }
+  /* ---------- header ---------- */
+  header{
+    display:flex;justify-content:space-between;align-items:baseline;
+    border-bottom:1px solid var(--line);
+    padding-bottom:12px;margin-bottom:16px;flex-wrap:wrap;gap:8px;
+  }
+  .brand{font-family:var(--mono);font-size:12px;letter-spacing:.18em;color:var(--amber);text-transform:uppercase}
+  .brand small{color:var(--muted);letter-spacing:.1em}
+  #clock{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  /* ---------- price strip ---------- */
+  .strip{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+    gap:1px;background:var(--line);border:1px solid var(--line);
+    margin-bottom:16px;
+  }
+  .cell{background:var(--panel);padding:12px 14px}
+  .cell .k{font-size:10px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;font-family:var(--mono)}
+  .cell .v{font-family:var(--mono);font-size:20px;font-weight:700;margin-top:2px}
+  .cell .s{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .up{color:var(--green)} .down{color:var(--red)} .amber{color:var(--amber)}
+  /* ---------- panels ---------- */
+  .panel{background:var(--panel);border:1px solid var(--line);margin-bottom:16px}
+  .panel-h{
+    display:flex;justify-content:space-between;align-items:center;
+    padding:10px 14px;border-bottom:1px solid var(--line);
+  }
+  .panel-h h2{font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;font-family:var(--mono);color:var(--text)}
+  .panel-h .tag{font-family:var(--mono);font-size:10px;color:var(--muted)}
+  .panel-b{padding:14px}
+  /* ---------- ladder (signature) ---------- */
+  .ladder-wrap{display:flex;gap:14px}
+  .ladder{position:relative;flex:0 0 64px;min-height:380px}
+  .ladder .rail{position:absolute;left:50%;top:0;bottom:0;width:2px;background:var(--line);transform:translateX(-50%)}
+  .rung{position:absolute;left:0;right:0;display:flex;align-items:center}
+  .rung .bar{height:2px;flex:1;background:var(--muted);opacity:.55}
+  .rung.entry .bar{background:var(--amber);opacity:.9;height:3px}
+  .rung.entry.hit .bar{background:var(--green)}
+  .rung.ref .bar{background:var(--muted);opacity:.35;height:1px;border-bottom:1px dashed var(--muted)}
+  .rung.danger .bar{background:var(--red);opacity:.8}
+  #cursor{
+    position:absolute;left:-8px;right:-8px;height:0;
+    transition:top 1s ease;z-index:3;
+  }
+  #cursor .dot{
+    position:absolute;left:50%;transform:translate(-50%,-50%);
+    width:12px;height:12px;background:var(--amber);border-radius:50%;
+    box-shadow:0 0 0 4px rgba(255,180,84,.18),0 0 18px rgba(255,180,84,.5);
+    animation:pulse 2.2s infinite;
+  }
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 4px rgba(255,180,84,.18),0 0 14px rgba(255,180,84,.45)}50%{box-shadow:0 0 0 7px rgba(255,180,84,.08),0 0 22px rgba(255,180,84,.6)}}
+  @media (prefers-reduced-motion: reduce){#cursor .dot{animation:none}#cursor{transition:none}}
+  .ladder-legend{flex:1;display:flex;flex-direction:column;justify-content:space-between;position:relative;min-height:380px}
+  .lv{position:absolute;left:0;right:0;transform:translateY(-50%)}
+  .lv .row{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .lv .name{font-family:var(--mono);font-size:11px}
+  .lv .price{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .lv .note{font-size:10px;color:var(--muted);line-height:1.35}
+  .lv.entry .name{color:var(--amber)}
+  .lv.entry.hit .name{color:var(--green)}
+  .lv.entry.hit .name::after{content:" ● 到達";font-size:9px}
+  .lv.danger .name{color:var(--red)}
+  /* ---------- gauge ---------- */
+  .gauge{display:flex;gap:4px;margin:8px 0 4px}
+  .gauge span{flex:1;height:10px;background:var(--panel-2);border:1px solid var(--line)}
+  .gauge span.on{background:var(--green);border-color:var(--green)}
+  .gauge-label{font-family:var(--mono);font-size:12px}
+  .verdict{font-size:13px;margin-top:8px;padding:10px 12px;background:var(--panel-2);border-left:3px solid var(--amber)}
+  /* ---------- signals ---------- */
+  .sig{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .sig:last-child{border-bottom:none}
+  .sig .st{
+    flex:0 0 46px;text-align:center;font-family:var(--mono);font-size:10px;
+    padding:3px 0;border:1px solid var(--line);color:var(--muted);cursor:default;
+  }
+  .sig .st.on{color:var(--green);border-color:var(--green)}
+  .sig .st.off{color:var(--muted)}
+  .sig .st.manual{cursor:pointer}
+  .sig .st.manual:hover{border-color:var(--amber)}
+  .sig .st.manual:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+  .sig .body{flex:1}
+  .sig .t{font-size:13px;font-weight:500}
+  .sig .d{font-size:11px;color:var(--muted)}
+  .sig .d a{color:var(--amber);text-decoration:none}
+  .sig .d a:hover{text-decoration:underline}
+  .sig .badge{font-family:var(--mono);font-size:9px;color:var(--muted);border:1px solid var(--line);padding:0 4px;margin-left:6px}
+  /* ---------- alerts ---------- */
+  #alert{display:none;background:rgba(229,83,75,.12);border:1px solid var(--red);color:var(--red);
+    padding:12px 14px;font-family:var(--mono);font-size:12px;margin-bottom:16px}
+  #alert.show{display:block}
+  /* ---------- MSTR ---------- */
+  .trg{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);gap:10px}
+  .trg:last-child{border-bottom:none}
+  .trg .n{font-family:var(--mono);font-size:12px;color:var(--amber);flex:0 0 30px}
+  .trg .c{flex:1;font-size:12px}
+  .trg .c small{display:block;color:var(--muted);font-size:10px}
+  .trg .sz{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  /* ---------- footer ---------- */
+  footer{font-size:10px;color:var(--muted);border-top:1px solid var(--line);padding-top:10px;line-height:1.7}
+  .btn{
+    font-family:var(--mono);font-size:10px;background:none;border:1px solid var(--line);
+    color:var(--muted);padding:4px 10px;cursor:pointer;letter-spacing:.08em;
+  }
+  .btn:hover{border-color:var(--amber);color:var(--amber)}
+  .btn:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+  #manual-price{display:none;margin-top:8px;gap:6px}
+  #manual-price.show{display:flex}
+  #manual-price input{
+    background:var(--panel-2);border:1px solid var(--line);color:var(--text);
+    font-family:var(--mono);padding:4px 8px;width:120px;font-size:12px;
+  }
+  @media (max-width:560px){
+    body{padding:10px}
+    .cell .v{font-size:17px}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">BTC Bottom Monitor <small>/ Cycle 2026</small></div>
+  <div id="clock">--</div>
+</header>
+
+<div id="alert">■ 無効化条件検出: BTC週足終値 $45,000 割れが2週連続。サテライト・LEAPS枠を停止し、C4指値をキャンセルするルールです。</div>
+
+<!-- price strip -->
+<div class="strip">
+  <div class="cell">
+    <div class="k">BTC / USD</div>
+    <div class="v amber" id="px">--</div>
+    <div class="s" id="px-src">binance</div>
+  </div>
+  <div class="cell">
+    <div class="k">200週移動平均</div>
+    <div class="v" id="wma">--</div>
+    <div class="s" id="wma-dist">--</div>
+  </div>
+  <div class="cell">
+    <div class="k">ピークからの日数</div>
+    <div class="v" id="days">--</div>
+    <div class="s">過去平均底 384日 → <span id="window-date">2026-10-25</span>前後</div>
+  </div>
+  <div class="cell">
+    <div class="k">高値からの下落率</div>
+    <div class="v down" id="dd">--</div>
+    <div class="s">ATH $126,198 (2025-10-06)</div>
+  </div>
+</div>
+
+<!-- confirmation score -->
+<div class="panel">
+  <div class="panel-h">
+    <h2>底確認度スコア</h2>
+    <span class="tag" id="score-tag">0 / 7</span>
+  </div>
+  <div class="panel-b">
+    <div class="gauge" id="gauge"></div>
+    <div class="verdict" id="verdict">データ取得中…</div>
+  </div>
+</div>
+
+<!-- ladder -->
+<div class="panel">
+  <div class="panel-h">
+    <h2>エントリーラダー — コアBTC (配分55)</h2>
+    <span class="tag">scale $40k–$80k</span>
+  </div>
+  <div class="panel-b">
+    <div class="ladder-wrap">
+      <div class="ladder" id="ladder">
+        <div class="rail"></div>
+        <div id="cursor"><div class="dot"></div></div>
+      </div>
+      <div class="ladder-legend" id="legend"></div>
+    </div>
+  </div>
+</div>
+
+<!-- signals -->
+<div class="panel">
+  <div class="panel-h">
+    <h2>ボトム確認シグナル</h2>
+    <button class="btn" id="reset-manual">手動リセット</button>
+  </div>
+  <div class="panel-b" id="signals"></div>
+</div>
+
+<!-- MSTR triggers -->
+<div class="panel">
+  <div class="panel-h">
+    <h2>サテライトMSTRトリガー (配分25)</h2>
+    <span class="tag">確認トリガー型</span>
+  </div>
+  <div class="panel-b">
+    <div class="trg">
+      <span class="n">S1</span>
+      <span class="c">MSTR &lt; $80 <small>逆張り・小玉。EV mNAVがパリティ近辺でも共通株は劣後している点を忘れずに</small></span>
+      <span class="sz">5</span>
+    </div>
+    <div class="trg">
+      <span class="n">S2</span>
+      <span class="c">BTC週足終値 &gt; $75,646 <small>Strategy平均取得単価超え = 二重エンジン(含み益回復)の点火点。下のシグナル⑥と連動</small></span>
+      <span class="sz">10</span>
+    </div>
+    <div class="trg">
+      <span class="n">S3</span>
+      <span class="c">EVベースmNAV &gt; 1.2 回復 <small>フライホイール再稼働の確認。bitcointreasuries.netで監視</small></span>
+      <span class="sz">10</span>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-b" style="padding:10px 14px">
+    <button class="btn" id="toggle-manual-price">価格を手動入力</button>
+    <div id="manual-price">
+      <input type="number" id="manual-px" placeholder="BTC price USD" aria-label="BTC price manual input">
+      <button class="btn" id="apply-manual">適用</button>
+    </div>
+  </div>
+</div>
+
+<footer>
+  データ: Binance公開API、接続不可の地域(米国等)ではKrakenに自動切替 (60秒ごと更新 / 週足から200WMA算出)。オンチェーン系シグナルは手動チェック式 — 各リンク先で確認後にステータスをタップ。手動チェックはこのブラウザに保存されます(端末ごとに独立)。<br>
+  本ツールは情報整理用であり投資助言ではありません。無効化ルール(週足$45k割れ2週連続)は自動判定しアラート表示します。
+</footer>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------- constants ---------- */
+  const PEAK_DATE = new Date("2025-10-06T00:00:00Z");
+  const PEAK_PRICE = 126198;
+  const AVG_BOTTOM_DAYS = 384;
+  const LADDER_MIN = 40000, LADDER_MAX = 80000;
+  const HIT_SINCE = Date.UTC(2026,0,1); // rung-hit detection window start
+
+  const LEVELS = [
+    {id:"mstr", p:75646, type:"ref",   name:"S2トリガー", note:"Strategy取得単価"},
+    {id:"c1",   p:60000, type:"entry", name:"C1 / 15",   note:"200WMA接触ゾーン"},
+    {id:"c2",   p:55000, type:"entry", name:"C2 / 15",   note:"実現価格帯 (~$54k)"},
+    {id:"rp",   p:54000, type:"ref",   name:"実現価格",   note:"全保有者平均取得コスト"},
+    {id:"c3",   p:50000, type:"entry", name:"C3 / 15",   note:"底値予想の中心帯"},
+    {id:"c4",   p:45000, type:"entry", name:"C4 / 10",   note:"弱気シナリオ帯"},
+    {id:"inv",  p:45000, type:"danger",name:"無効化ライン", note:"週足終値2週連続割れで縮小"}
+  ];
+
+  /* ---------- state ---------- */
+  let price = null;
+  let wma200 = null;
+  let weekly = [];          // closed weekly candles [{close, low, closeTime}]
+  let manual = {};          // manual signal states
+  let storageOK = false;
+
+  /* ---------- storage (localStorage for self-hosting) ---------- */
+  const STORE_KEY = "bottom-monitor-signals";
+  async function loadManual(){
+    try{
+      const raw = localStorage.getItem(STORE_KEY);
+      if(raw){ manual = JSON.parse(raw); }
+      storageOK = true;
+    }catch(e){ storageOK = false; /* private mode etc — in-memory fallback */ }
+  }
+  async function saveManual(){
+    try{ localStorage.setItem(STORE_KEY, JSON.stringify(manual)); }
+    catch(e){ console.error("storage save failed", e); }
+  }
+
+  /* ---------- data ---------- */
+  async function fetchPrice(){
+    // 1) Binance (JP/EU) → 2) Kraken (US対応) → 3) CoinGecko
+    try{
+      const r = await fetch("https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT");
+      if(!r.ok) throw new Error("binance "+r.status);
+      const j = await r.json();
+      price = parseFloat(j.price);
+      document.getElementById("px-src").textContent = "binance · live";
+      return true;
+    }catch(e){}
+    try{
+      const r = await fetch("https://api.kraken.com/0/public/Ticker?pair=XBTUSD");
+      if(!r.ok) throw new Error("kraken "+r.status);
+      const j = await r.json();
+      const key = Object.keys(j.result)[0];
+      price = parseFloat(j.result[key].c[0]);
+      document.getElementById("px-src").textContent = "kraken · live";
+      return true;
+    }catch(e){}
+    try{
+      const r = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd");
+      if(!r.ok) throw new Error("coingecko "+r.status);
+      const j = await r.json();
+      price = j.bitcoin.usd;
+      document.getElementById("px-src").textContent = "coingecko · live";
+      return true;
+    }catch(e){
+      document.getElementById("px-src").textContent = "取得失敗 — 手動入力を使用";
+      return false;
+    }
+  }
+
+  function computeWMA(){
+    const last200 = weekly.slice(-200);
+    if(last200.length >= 150){
+      wma200 = last200.reduce((s,c)=>s+c.close,0)/last200.length;
+    }
+  }
+  async function fetchWeekly(){
+    // 1) Binance → 2) Kraken (interval=10080分=週足、最大720本)
+    try{
+      const r = await fetch("https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1w&limit=210");
+      if(!r.ok) throw new Error("binance "+r.status);
+      const rows = await r.json();
+      const closed = rows.slice(0,-1); // drop unclosed candle
+      weekly = closed.map(k=>({openTime:k[0], low:parseFloat(k[3]), close:parseFloat(k[4]), closeTime:k[6]}));
+      computeWMA();
+      return true;
+    }catch(e){}
+    try{
+      const r = await fetch("https://api.kraken.com/0/public/OHLC?pair=XBTUSD&interval=10080");
+      if(!r.ok) throw new Error("kraken "+r.status);
+      const j = await r.json();
+      const key = Object.keys(j.result).find(k=>k!=="last");
+      const rows = j.result[key];
+      const closed = rows.slice(0,-1); // drop unclosed candle
+      weekly = closed.map(k=>({openTime:k[0]*1000, low:parseFloat(k[3]), close:parseFloat(k[4]), closeTime:k[0]*1000+604800000}));
+      computeWMA();
+      return true;
+    }catch(e){ return false; }
+  }
+
+  /* ---------- computed signals ---------- */
+  function autoSignals(){
+    const out = {};
+    // ① two consecutive weekly closes above 200WMA
+    if(wma200 && weekly.length>=2){
+      const l2 = weekly.slice(-2);
+      out.wmaReclaim = l2.every(c=>c.close > wma200);
+    }
+    // ⑥ weekly close above MSTR cost basis
+    if(weekly.length>=1){
+      out.aboveCost = weekly[weekly.length-1].close > 75646;
+    }
+    // ⑦ inside historical bottom window (day 330–440)
+    const days = daysSincePeak();
+    out.window = days>=330 && days<=440;
+    // invalidation: two consecutive closes below 45k
+    if(weekly.length>=2){
+      const l2 = weekly.slice(-2);
+      out.invalidated = l2.every(c=>c.close < 45000);
+    }
+    return out;
+  }
+
+  function daysSincePeak(){
+    return Math.floor((Date.now()-PEAK_DATE.getTime())/86400000);
+  }
+
+  /* ---------- signal definitions ---------- */
+  const SIGNALS = [
+    {id:"wmaReclaim", auto:true,  t:"① 週足終値が200WMA上を2週連続維持", d:"トレンド反転の一次確認。自動判定"},
+    {id:"mvrv",       auto:false, t:"② MVRV Zスコア < 1 (蓄積ゾーン)", d:'<a href="https://www.bitcoinmagazinepro.com/charts/mvrv-zscore/" target="_blank" rel="noopener">Bitcoin Magazine Pro</a> で確認'},
+    {id:"supply",     auto:false, t:"③ 含み損供給 > 含み益供給 を経験済み", d:'歴代ボトムの刻印。<a href="https://studio.glassnode.com" target="_blank" rel="noopener">Glassnode</a> / CoinDesk報道で確認'},
+    {id:"etf",        auto:false, t:"④ 現物ETF純流入が2週連続プラス", d:'需要反転の確認。<a href="https://farside.co.uk/btc/" target="_blank" rel="noopener">Farside</a> で日次フロー確認'},
+    {id:"funding",    auto:false, t:"⑤ Fundingがマイナス圏から中立へ回復", d:'投げ売り完了の確認。<a href="https://www.coinglass.com/FundingRate" target="_blank" rel="noopener">CoinGlass</a>'},
+    {id:"aboveCost",  auto:true,  t:"⑥ 週足終値 > $75,646 (Strategy取得単価)", d:"MSTR S2トリガーと連動。自動判定"},
+    {id:"window",     auto:true,  t:"⑦ 歴史的ボトムウィンドウ内 (ピーク後330–440日)", d:"2026年9月〜2027年1月に相当。自動判定"}
+  ];
+
+  /* ---------- render ---------- */
+  const fmt = n => n==null ? "--" : "$"+Math.round(n).toLocaleString("en-US");
+  const yPos = p => {
+    const c = Math.min(Math.max(p,LADDER_MIN),LADDER_MAX);
+    return (1-(c-LADDER_MIN)/(LADDER_MAX-LADDER_MIN))*100;
+  };
+
+  function buildLadder(){
+    const ladder = document.getElementById("ladder");
+    const legend = document.getElementById("legend");
+    LEVELS.forEach(lv=>{
+      const y = yPos(lv.p);
+      if(lv.type!=="danger" || true){
+        const r = document.createElement("div");
+        r.className = "rung "+lv.type;
+        r.id = "rung-"+lv.id;
+        r.style.top = y+"%";
+        r.innerHTML = '<div class="bar"></div>';
+        ladder.appendChild(r);
+      }
+      const el = document.createElement("div");
+      el.className = "lv "+lv.type;
+      el.id = "lv-"+lv.id;
+      el.style.top = y+"%";
+      el.innerHTML = '<div class="row"><span class="name">'+lv.name+'</span><span class="price">'+fmt(lv.p)+'</span></div><div class="note">'+lv.note+'</div>';
+      legend.appendChild(el);
+    });
+  }
+
+  function updateLadder(){
+    if(price!=null){
+      document.getElementById("cursor").style.top = yPos(price)+"%";
+    }
+    // rung hit detection: lowest weekly low since 2026-01-01, plus current price
+    let minLow = Infinity;
+    weekly.forEach(c=>{ if(c.openTime>=HIT_SINCE && c.low<minLow) minLow=c.low; });
+    if(price!=null && price<minLow) minLow = price;
+    LEVELS.filter(l=>l.type==="entry").forEach(lv=>{
+      const hit = minLow <= lv.p;
+      document.getElementById("rung-"+lv.id).classList.toggle("hit",hit);
+      document.getElementById("lv-"+lv.id).classList.toggle("hit",hit);
+    });
+  }
+
+  function renderSignals(){
+    const box = document.getElementById("signals");
+    box.innerHTML = "";
+    const auto = autoSignals();
+    let score = 0;
+    SIGNALS.forEach(s=>{
+      const on = s.auto ? !!auto[s.id] : !!manual[s.id];
+      if(on) score++;
+      const row = document.createElement("div");
+      row.className = "sig";
+      const st = document.createElement("div");
+      st.className = "st "+(on?"on":"off")+(s.auto?"":" manual");
+      st.textContent = on ? "確認" : "未達";
+      if(!s.auto){
+        st.setAttribute("role","switch");
+        st.setAttribute("aria-checked",on);
+        st.tabIndex = 0;
+        const toggle = ()=>{ manual[s.id]=!manual[s.id]; saveManual(); renderSignals(); };
+        st.addEventListener("click",toggle);
+        st.addEventListener("keydown",e=>{ if(e.key==="Enter"||e.key===" "){e.preventDefault();toggle();} });
+      }
+      row.appendChild(st);
+      const body = document.createElement("div");
+      body.className = "body";
+      body.innerHTML = '<div class="t">'+s.t+'<span class="badge">'+(s.auto?"AUTO":"手動")+'</span></div><div class="d">'+s.d+'</div>';
+      row.appendChild(body);
+      box.appendChild(row);
+    });
+    // gauge
+    const g = document.getElementById("gauge");
+    g.innerHTML = "";
+    for(let i=0;i<SIGNALS.length;i++){
+      const seg = document.createElement("span");
+      if(i<score) seg.classList.add("on");
+      g.appendChild(seg);
+    }
+    document.getElementById("score-tag").textContent = score+" / "+SIGNALS.length;
+    const v = document.getElementById("verdict");
+    if(auto.invalidated){
+      v.textContent = "無効化条件が成立しています。ルール上、確認度に関わらずサテライト・凸性枠は停止です。";
+      v.style.borderLeftColor = "var(--red)";
+    }else if(score<=2){
+      v.textContent = "確認度: 低 — ラダー指値の待機フェーズ。約定したC枠以外は動かさない。";
+      v.style.borderLeftColor = "var(--amber)";
+    }else if(score<=4){
+      v.textContent = "確認度: 中 — 底形成の兆候あり。ETFフローとFundingの反転を重点監視。";
+      v.style.borderLeftColor = "var(--amber)";
+    }else{
+      v.textContent = "確認度: 高 — 複数シグナルが揃っています。S2/S3トリガーとLEAPS第2弾の執行判断ゾーン。";
+      v.style.borderLeftColor = "var(--green)";
+    }
+    // invalidation banner
+    document.getElementById("alert").classList.toggle("show", !!auto.invalidated);
+  }
+
+  function renderStrip(){
+    document.getElementById("px").textContent = fmt(price);
+    document.getElementById("wma").textContent = fmt(wma200);
+    if(price && wma200){
+      const d = (price/wma200-1)*100;
+      const el = document.getElementById("wma-dist");
+      el.textContent = (d>=0?"+":"")+d.toFixed(1)+"% vs 200WMA";
+      el.className = "s "+(d>=0?"up":"down");
+    }
+    const days = daysSincePeak();
+    document.getElementById("days").textContent = days;
+    if(price){
+      document.getElementById("dd").textContent = ((price/PEAK_PRICE-1)*100).toFixed(1)+"%";
+    }
+    const wd = new Date(PEAK_DATE.getTime()+AVG_BOTTOM_DAYS*86400000);
+    document.getElementById("window-date").textContent = wd.toISOString().slice(0,10);
+  }
+
+  function tickClock(){
+    document.getElementById("clock").textContent = new Date().toLocaleString("ja-JP",{hour12:false});
+  }
+
+  /* ---------- manual price ---------- */
+  document.getElementById("toggle-manual-price").addEventListener("click",()=>{
+    document.getElementById("manual-price").classList.toggle("show");
+  });
+  document.getElementById("apply-manual").addEventListener("click",()=>{
+    const v = parseFloat(document.getElementById("manual-px").value);
+    if(!isNaN(v)&&v>0){
+      price = v;
+      document.getElementById("px-src").textContent = "manual";
+      renderStrip(); updateLadder(); renderSignals();
+    }
+  });
+  document.getElementById("reset-manual").addEventListener("click",()=>{
+    manual = {}; saveManual(); renderSignals();
+  });
+
+  /* ---------- boot ---------- */
+  async function refresh(){
+    await fetchPrice();
+    renderStrip(); updateLadder(); renderSignals();
+  }
+  (async function init(){
+    tickClock(); setInterval(tickClock,1000);
+    buildLadder();
+    await loadManual();
+    await fetchWeekly();
+    await refresh();
+    setInterval(refresh,60000);
+    setInterval(fetchWeekly,3600000);
+  })();
+})();
+</script>
+</body>
+</html>
